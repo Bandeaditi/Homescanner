@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopperLab — results</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/theme.css">
+<style>
+  .fidelity {
+    display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 30px; align-items: center;
+  }
+  @media (max-width: 760px) { .fidelity { grid-template-columns: 1fr; } }
+  .dial { position: relative; width: 210px; height: 210px; }
+  .dial svg { transform: rotate(-90deg); }
+  .dial .val {
+    position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
+  }
+  .dial .val b { font-family: var(--display); font-size: 3.1rem; line-height: 1; letter-spacing: -.04em; }
+  .dial .val span { font-size: .78rem; color: var(--muted); }
+
+  .comp { display: grid; grid-template-columns: minmax(0,1fr) 64px; gap: 12px; align-items: center; padding: 7px 0; }
+  .comp .track { height: 8px; border-radius: 999px; background: var(--raise); overflow: hidden; }
+  .comp .track > i { display: block; height: 100%; background: linear-gradient(90deg, var(--pink), var(--violet)); }
+  .comp .lbl { font-size: .86rem; }
+  .comp .det { font-size: .74rem; color: var(--muted); }
+  .comp .num { text-align: right; font-variant-numeric: tabular-nums; font-size: .9rem; }
+
+  .paired { display: grid; grid-template-columns: 190px minmax(0,1fr) 96px; gap: 12px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  .paired .name { font-size: .85rem; display: flex; align-items: center; gap: 8px; }
+  .paired .name i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .paired .bars { display: grid; gap: 4px; }
+  .paired .delta { text-align: right; font-size: .8rem; font-variant-numeric: tabular-nums; }
+  @media (max-width: 700px) { .paired { grid-template-columns: 120px minmax(0,1fr) 66px; } }
+
+  .insight { border: 1px solid var(--line-soft); border-left-width: 3px; border-radius: var(--r-md); padding: 14px 16px; background: var(--panel-2); }
+  .insight.win { border-left-color: var(--ok); }
+  .insight.watch { border-left-color: var(--warn); }
+  .insight.risk { border-left-color: var(--pink); }
+  .insight.info { border-left-color: var(--violet); }
+  .insight h3 { font-size: .98rem; margin-bottom: 5px; }
+  .insight p { font-size: .87rem; color: var(--text-2); margin: 0 0 6px; }
+  .legend { display: flex; gap: 16px; font-size: .8rem; color: var(--muted); }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+</style>
+</head>
+<body class="app">
+<header class="topbar">
+  <a class="brand" href="index.html"><span class="mark"></span> ShopperLab</a>
+  <nav class="nav"></nav>
+</header>
+
+<main class="wrap wide">
+  <section style="padding:26px 0 14px" class="spread">
+    <div>
+      <h1 id="expTitle">Results</h1>
+      <p class="muted" id="subtitle"></p>
+    </div>
+    <div class="row">
+      <label class="field" style="margin:0"><span>Variant</span><select id="variantSel"></select></label>
+      <button id="exportCsv">Export CSV</button>
+      <button id="exportJson">Export sessions</button>
+    </div>
+  </section>
+
+  <div id="emptyState" class="empty" hidden>
+    No sessions yet for this variant. Walk the store once, then run the AI panel on the same layout.
+  </div>
+
+  <div id="content">
+    <section class="panel">
+      <header><h2>Can the synthetic panel stand in for people?</h2>
+        <p>One score, built from six independent agreements between the two panels.</p></header>
+      <div class="fidelity">
+        <div class="dial" id="dial"></div>
+        <div>
+          <h3 id="gradeLabel" style="margin-bottom:4px"></h3>
+          <p class="muted tiny" id="gradeNote" style="margin-bottom:14px"></p>
+          <div id="components"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid c4" id="headline" style="margin-top:18px"></div>
+
+    <section class="panel">
+      <header>
+        <h2>Where attention went</h2>
+        <p>Share of total shelf gaze per SKU.</p>
+        <span class="legend" style="margin-left:auto"><span><i style="background:var(--pink)"></i>real</span><span><i style="background:var(--violet)"></i>synthetic</span></span>
+      </header>
+      <div id="attentionChart"></div>
+    </section>
+
+    <div class="grid c2">
+      <section class="panel">
+        <header><h2>What went in the basket</h2><p>Share of all units bought.</p></header>
+        <div id="purchaseChart"></div>
+      </section>
+      <section class="panel">
+        <header><h2>Where the time went</h2><p>Share of trip time by store zone.</p></header>
+        <div id="zoneChart"></div>
+      </section>
+    </div>
+
+    <div class="grid c2">
+      <section class="panel">
+        <header><h2>Paths walked</h2><p>Every recorded route, overlaid on the store.</p></header>
+        <svg id="pathMap" viewBox="0 0 520 400" class="map" style="width:100%;border:1px solid var(--line-soft);border-radius:14px;background:var(--deep)"></svg>
+      </section>
+      <section class="panel">
+        <header><h2>Retail media</h2><p>Gaze on each surface and what it did for the SKU it carries.</p></header>
+        <div id="mediaTable"></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <header><h2>A/B read-out</h2><p>What the layout change did, and whether both panels agree it happened.</p></header>
+      <div id="abBlock"></div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <h2>What to do about it</h2>
+        <p>Generated from the numbers above, ordered by urgency.</p>
+        <button class="small" id="narrateBtn" style="margin-left:auto">Write the summary with the model</button>
+      </header>
+      <div id="narrative"></div>
+      <div class="stack" id="insights" style="margin-top:14px"></div>
+    </section>
+
+    <section class="panel">
+      <header><h2>Against a physical test</h2><p>Same read, same store, different instrument.</p></header>
+      <div class="grid c4" id="economics"></div>
+      <p class="tiny muted" style="margin-top:12px">Physical benchmark assumes a $100k, ten-week controlled store
+        study. Digital cost counts setup time at $90/hour plus $12 per recruited human session and hosted
+        inference for the synthetic panel. Change the assumptions in metrics.js to match your own rate card.</p>
+    </section>
+  </div>
+</main>
+
+<script type="module" src="assets/js/analytics/dashboard.js"></script>
+</body>
+</html>

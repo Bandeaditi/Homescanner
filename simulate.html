@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopperLab — AI panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/theme.css">
+<style>
+  .runner { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .runner { grid-template-columns: 1fr; } }
+  .progress { height: 10px; border-radius: 999px; background: var(--raise); overflow: hidden; margin: 14px 0 8px; }
+  .progress > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--violet), var(--pink)); transition: width .2s; }
+  .log { font-size: .82rem; color: var(--text-2); max-height: 220px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--r-sm); padding: 10px 12px; background: var(--deep); }
+  .log div { padding: 2px 0; border-bottom: 1px solid rgba(52,32,90,.4); }
+  .brief { border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 14px; background: var(--panel-2); }
+  .brief h4 { display: flex; align-items: center; gap: 8px; font-size: .95rem; margin-bottom: 6px; }
+  .brief .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .brief p { font-size: .86rem; color: var(--text-2); margin: 0; }
+</style>
+</head>
+<body class="app">
+<header class="topbar">
+  <a class="brand" href="index.html"><span class="mark"></span> ShopperLab</a>
+  <nav class="nav"></nav>
+</header>
+
+<main class="wrap">
+  <section style="padding:26px 0 18px">
+    <h1>Send the AI panel through the same store.</h1>
+    <p class="muted" style="max-width:70ch">Each persona walks the fixtures a human walks, spends a finite
+      attention budget across the facings in front of it, and chooses with a random-utility model. Turn the
+      Hugging Face model on in setup and each persona also reads the shelf in character before it starts.</p>
+  </section>
+
+  <div class="runner">
+    <div>
+      <section class="panel">
+        <header><h2>Run the panel</h2><p id="panelSummary"></p></header>
+        <div class="row">
+          <label class="field" style="margin:0;min-width:180px">
+            <span>Variant</span>
+            <select id="variantSel"></select>
+          </label>
+          <label class="switch" style="margin-top:18px"><input type="checkbox" id="useModel"> <span>Use the Hugging Face model</span></label>
+          <label class="switch" style="margin-top:18px"><input type="checkbox" id="replace" checked> <span>Replace previous synthetic runs for this variant</span></label>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="primary" id="runBtn">Run panel</button>
+          <button id="runBoth">Run both variants</button>
+          <a class="btn ghost" href="results.html">Go to results</a>
+        </div>
+        <div class="progress"><i id="bar"></i></div>
+        <div class="log" id="log"><div class="muted">Nothing run yet.</div></div>
+      </section>
+
+      <section class="panel">
+        <header><h2>How the personas read this store</h2><p>Returned by the model when it is switched on.</p></header>
+        <div class="grid c2" id="briefs">
+          <div class="empty" style="grid-column:1/-1">Run the panel with the model on to see each persona's reasoning.</div>
+        </div>
+      </section>
+    </div>
+
+    <aside>
+      <section class="panel">
+        <header><h2>Panel size</h2></header>
+        <div id="mix" class="stack"></div>
+        <hr class="divider">
+        <div class="kv spread tiny"><span class="muted">Sessions per run</span><b id="perRun">0</b></div>
+        <div class="kv spread tiny"><span class="muted">Stored synthetic</span><b id="storedSynth">0</b></div>
+        <div class="kv spread tiny"><span class="muted">Stored human</span><b id="storedReal">0</b></div>
+        <p class="tiny muted" style="margin-top:12px">Change the mix in setup. Roughly 40 synthetic shoppers per
+          variant is enough for stable shares; more only narrows the noise.</p>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<script type="module" src="assets/js/ai/panel.js"></script>
+</body>
+</html>

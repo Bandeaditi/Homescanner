@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopperLab — in store</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/theme.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  #view { position: fixed; inset: 0; display: block; cursor: crosshair; }
+
+  .hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .hud > * { pointer-events: auto; }
+
+  .hud-card {
+    position: absolute;
+    background: rgba(246, 74, 191, 0.82);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 12px 15px;
+    backdrop-filter: blur(10px);
+    max-width: 330px;
+  }
+  #taskCard { top: 16px; left: 16px; }
+  #taskCard h3 { font-size: .95rem; margin-bottom: 4px; }
+  #taskCard p { font-size: .84rem; color: var(--text-2); margin: 0; }
+  #statusCard { top: 16px; right: 16px; min-width: 230px; }
+  #basketCard { bottom: 16px; right: 16px; min-width: 230px; max-height: 42vh; overflow: auto; }
+  #hintBar {
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 14px; font-size: .8rem; color: var(--text-2);
+    background: rgba(14,7,28,.8); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 18px; backdrop-filter: blur(10px);
+  }
+  #hintBar b { color: var(--pink); font-weight: 600; }
+
+  .kv { display: flex; justify-content: space-between; gap: 12px; font-size: .82rem; padding: 2px 0; }
+  .kv span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+  .kv span:first-child { color: var(--muted); }
+
+  #reticle {
+    position: fixed; left: 50%; top: 50%; width: 12px; height: 12px;
+    margin: -6px 0 0 -6px; border: 1px solid rgba(242,233,255,.6);
+    border-radius: 50%; z-index: 11; pointer-events: none;
+  }
+  #gazeDot {
+    position: fixed; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    border-radius: 50%; z-index: 12; pointer-events: none;
+    background: radial-gradient(circle, rgba(255,79,163,.55), rgba(255,79,163,0) 70%);
+    border: 1px solid rgba(255,79,163,.75);
+    transition: opacity .2s; opacity: 0;
+  }
+  #focusLabel {
+    position: fixed; left: 50%; top: calc(50% + 26px); transform: translateX(-50%);
+    z-index: 11; pointer-events: none; font-size: .84rem;
+    background: rgba(14,7,28,.86); border: 1px solid var(--line);
+    padding: 6px 12px; border-radius: 999px; display: none;
+  }
+
+  .veil {
+    position: fixed; inset: 0; z-index: 30;
+    background: radial-gradient(900px 520px at 50% 10%, rgba(155,92,246,.22), transparent 60%), rgba(8,4,15,.94);
+    display: grid; place-items: center; padding: 24px; overflow: auto;
+  }
+  .veil .box { max-width: 620px; width: 100%; }
+  .veil[hidden] { display: none; }
+
+  #calTarget {
+    position: fixed; width: 34px; height: 34px; margin: -17px 0 0 -17px; z-index: 41;
+    border-radius: 50%; background: var(--pink);
+    box-shadow: 0 0 0 8px rgba(255,79,163,.18), 0 0 26px rgba(255,79,163,.8);
+  }
+  #calTarget::after {
+    content: ''; position: absolute; inset: 13px; border-radius: 50%; background: #fff;
+  }
+  #calProgress { position: fixed; left: 50%; bottom: 8%; transform: translateX(-50%); z-index: 41; text-align: center; }
+
+  #cam { position: fixed; right: 16px; bottom: 16px; width: 150px; border-radius: 10px;
+         border: 1px solid var(--line); opacity: .28; z-index: 9; transform: scaleX(-1); display: none; }
+
+  .product-card { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 25; width: min(420px, 92vw); }
+  .product-card .swatch { height: 88px; border-radius: var(--r-md); margin-bottom: 12px; display: flex; align-items: flex-end; padding: 12px; font-family: var(--display); font-size: 1.2rem; }
+  .mobile-pad { position: fixed; left: 16px; bottom: 16px; display: none; gap: 8px; z-index: 13; }
+  .mobile-pad button { width: 54px; height: 54px; border-radius: 16px; font-size: 1.1rem; }
+  @media (pointer: coarse) { .mobile-pad { display: flex; } #hintBar { display: none; } }
+</style>
+</head>
+<body>
+
+<canvas id="view"></canvas>
+<video id="cam" playsinline muted></video>
+
+<div id="reticle"></div>
+<div id="gazeDot"></div>
+<div id="focusLabel"></div>
+
+<div class="hud">
+  <div class="hud-card" id="taskCard">
+    <h3 id="taskTitle">Your shopping trip</h3>
+    <p id="taskBody"></p>
+    <div class="row" style="margin-top:9px">
+      <span class="chip real" id="variantChip">Variant A</span>
+      <span class="chip" id="timerChip">0:00</span>
+    </div>
+  </div>
+
+  <div class="hud-card" id="statusCard">
+    <div class="kv"><span>Eye tracking</span><span id="gazeState">off</span></div>
+    <div class="kv"><span>Face detected</span><span id="faceState">—</span></div>
+    <div class="kv"><span>Tracker rate</span><span id="fpsState">—</span></div>
+    <div class="kv"><span>Looking at</span><span id="lookState">—</span></div>
+    <div class="kv"><span>Distance walked</span><span id="distState">0.0 m</span></div>
+    <div class="row" style="margin-top:8px">
+      <button class="small" id="recalBtn">Recalibrate</button>
+      <button class="small" id="endBtn">End trip</button>
+    </div>
+  </div>
+
+  <div class="hud-card" id="basketCard">
+    <div class="spread" style="margin-bottom:6px">
+      <b style="font-family:var(--display)">Basket</b>
+      <span class="chip" id="basketTotal">$0.00</span>
+    </div>
+    <div id="basketList" class="tiny muted">Nothing picked up yet.</div>
+  </div>
+
+  <div class="hud-card" id="hintBar">
+    <span><b>W A S D</b> walk</span>
+    <span><b>Shift</b> hurry</span>
+    <span><b>E</b> pick up</span>
+    <span><b>F</b> pay at checkout</span>
+    <span><b>Esc</b> release mouse</span>
+  </div>
+
+  <div class="mobile-pad">
+    <button data-move="left">←</button>
+    <button data-move="fwd">↑</button>
+    <button data-move="right">→</button>
+    <button data-move="pick">E</button>
+  </div>
+</div>
+
+<!-- start -->
+<div class="veil" id="startVeil">
+  <div class="box panel">
+    <h1 style="font-size:2rem;margin-bottom:8px">Walk the store</h1>
+    <p class="muted" id="startTask"></p>
+    <div class="notice info" style="margin:14px 0">
+      Eye tracking runs entirely in this browser tab using your webcam. Frames are processed on your machine
+      and discarded — only the resulting gaze coordinates are kept, and only for this session.
+    </div>
+    <div class="grid c2" style="gap:12px">
+      <div class="stat"><div class="k" id="preVariant" style="font-size:1.3rem">A</div><div class="l">Variant you are testing</div></div>
+      <div class="stat"><div class="k" id="preFacings" style="font-size:1.3rem">0</div><div class="l">Facings merchandised</div></div>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button class="primary" id="startWithCam">Start with eye tracking</button>
+      <button id="startNoCam">Start without a camera</button>
+      <a class="btn ghost" href="index.html">Back to setup</a>
+    </div>
+    <p class="tiny muted" id="startError" style="margin-top:12px"></p>
+  </div>
+</div>
+
+<!-- calibration -->
+<div class="veil" id="calVeil" hidden>
+  <div class="box panel" id="calIntro">
+    <h2>Quick calibration</h2>
+    <p class="muted">Five dots, about a second each. Keep your head still and follow each dot with your eyes.
+      This fits the mapping from your face to your screen.</p>
+    <div class="row"><button class="primary" id="calStart">Begin</button><button id="calSkip">Skip for now</button></div>
+  </div>
+</div>
+<div id="calTarget" hidden></div>
+<div id="calProgress" hidden></div>
+
+<!-- product card -->
+<div class="panel product-card" id="productCard" hidden>
+  <div class="swatch" id="pcSwatch"></div>
+  <h2 id="pcName">Product</h2>
+  <p class="muted tiny" id="pcMeta"></p>
+  <div class="row" style="margin-top:6px">
+    <span class="chip" id="pcPrice"></span>
+    <span class="chip promo" id="pcPromo" hidden>On promotion</span>
+    <span class="chip" id="pcShelf"></span>
+  </div>
+  <div class="row" style="margin-top:16px">
+    <button class="primary" id="pcAdd">Put in basket</button>
+    <button id="pcClose">Put it back</button>
+  </div>
+</div>
+
+<!-- finish -->
+<div class="veil" id="endVeil" hidden>
+  <div class="box panel">
+    <h2>Trip recorded</h2>
+    <p class="muted">This session is now stored against the variant you shopped. Run the AI panel on the same
+      layout to see how closely the synthetic shoppers matched you.</p>
+    <div class="grid c3" style="gap:12px;margin:16px 0" id="endStats"></div>
+    <h3 style="margin-bottom:8px">Where your attention went</h3>
+    <div id="endAttention" class="stack"></div>
+    <div class="row" style="margin-top:20px">
+      <a class="btn btn-primary" href="results.html">See results</a>
+      <a class="btn" href="store.html">Shop again</a>
+      <a class="btn ghost" href="index.html">Change the layout</a>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="assets/js/store/session.js"></script>
+</body>
+</html>
