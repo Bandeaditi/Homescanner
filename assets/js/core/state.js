@@ -6,6 +6,7 @@ import {
   BAYS, FEATURES, SHELF_LEVELS, SLOTS_PER_LEVEL, BANNER_MOUNTS,
   PRODUCTS, PERSONAS, DEFAULT_HF, productById
 } from './config.js';
+import { exportImages, importImages } from './images.js';
 
 const KEY = 'shopperlab.experiment.v1';
 
@@ -75,26 +76,37 @@ function seedPlanogram(mode = 'A') {
   return plan;
 }
 
-function seedBanners(mode = 'A') {
-  const promoted = mode === 'A' ? 'nova-crunch' : 'aurora-oats';
-  const base = {};
-  for (const m of BANNER_MOUNTS) {
-    base[m.id] = {
-      enabled: ['entrance-arch', 'wall-back', 'screen-island'].includes(m.id),
-      headline: mode === 'A' ? 'Nova Crunch' : 'Aurora Oats',
-      subline: mode === 'A' ? 'Two for $9 this week' : 'Wholegrain, no added sugar',
-      promotedSku: promoted,
-      bg: mode === 'A' ? '#ff4fa3' : '#9b5cf6',
-      fg: '#120720'
-    };
-  }
-  base['aisle-1-head'].headline = 'Breakfast';
-  base['aisle-1-head'].subline = 'Cereal & spreads';
-  base['aisle-3-head'].headline = 'Snacking';
-  base['aisle-3-head'].subline = 'Chips, bars, bites';
-  base['floor-decal'].headline = 'On promotion';
-  base['floor-decal'].subline = 'Aisle 2';
-  return base;
+/* Creatives live at experiment level: upload or write one, then drag it onto
+   as many surfaces as you like, in either variant. A surface with no creative
+   on it is simply off. */
+export function seedCreatives() {
+  return [
+    { id: 'cr-nova',   name: 'Nova Crunch price promo', imageId: null,
+      headline: 'Nova Crunch', subline: 'Two for $9 this week',
+      bg: '#ff4fa3', fg: '#120720', promotedSku: 'nova-crunch' },
+    { id: 'cr-aurora', name: 'Aurora Oats brand ad', imageId: null,
+      headline: 'Aurora Oats', subline: 'Wholegrain, no added sugar',
+      bg: '#9b5cf6', fg: '#120720', promotedSku: 'aurora-oats' },
+    { id: 'cr-break',  name: 'Breakfast aisle sign', imageId: null,
+      headline: 'Breakfast', subline: 'Cereal & spreads',
+      bg: '#2b1b47', fg: '#f2e9ff', promotedSku: null },
+    { id: 'cr-snack',  name: 'Snacking aisle sign', imageId: null,
+      headline: 'Snacking', subline: 'Chips, bars, bites',
+      bg: '#2b1b47', fg: '#f2e9ff', promotedSku: null }
+  ];
+}
+
+/* Which creative sits on which mount, per variant. null means the surface is off. */
+function seedBannerSlots(mode = 'A') {
+  const hero = mode === 'A' ? 'cr-nova' : 'cr-aurora';
+  const slots = {};
+  for (const m of BANNER_MOUNTS) slots[m.id] = null;
+  slots['entrance-arch'] = hero;
+  slots['wall-back'] = hero;
+  slots['screen-island'] = hero;
+  slots['aisle-1-head'] = 'cr-break';
+  slots['aisle-3-head'] = 'cr-snack';
+  return slots;
 }
 
 function seedVariant(id, name, mode) {
@@ -102,7 +114,7 @@ function seedVariant(id, name, mode) {
     id, name,
     note: mode === 'A' ? 'Control planogram, hero brand at eye level.' : 'Test cell: hero demoted, different media creative.',
     planogram: seedPlanogram(mode),
-    banners: seedBanners(mode),
+    banners: seedBannerSlots(mode),
     priceOverrides: {},
     promoSkus: mode === 'A' ? ['nova-crunch', 'fizzly-cola'] : ['aurora-oats', 'verve-energy']
   };
@@ -114,6 +126,7 @@ export function defaultExperiment() {
     name: 'Cereal & coffee shelf test',
     created: Date.now(),
     activeVariant: 'A',
+    creatives: seedCreatives(),
     variants: {
       A: seedVariant('A', 'Variant A — control', 'A'),
       B: seedVariant('B', 'Variant B — test', 'B')
@@ -151,17 +164,54 @@ function migrate(exp) {
   const merged = { ...base, ...exp };
   merged.hf = { ...base.hf, ...(exp.hf || {}) };
   merged.variants = merged.variants || base.variants;
+  merged.creatives = Array.isArray(merged.creatives) ? merged.creatives : [];
+
   for (const key of Object.keys(merged.variants)) {
     const v = merged.variants[key];
     const full = emptyPlanogram();
     merged.variants[key] = {
       ...seedVariant(key, v.name || `Variant ${key}`, key),
       ...v,
-      planogram: { ...full, ...(v.planogram || {}) }
+      planogram: { ...full, ...(v.planogram || {}) },
+      banners: upgradeBanners(v.banners, merged.creatives)
     };
   }
+  if (!merged.creatives.length) merged.creatives = base.creatives;
   merged.sessions = Array.isArray(merged.sessions) ? merged.sessions : [];
   return merged;
+}
+
+/* Experiments saved before the creative library stored the artwork inline on
+   each mount. Lift those into creatives so old files keep working. */
+function upgradeBanners(banners, creatives) {
+  const slots = {};
+  for (const m of BANNER_MOUNTS) slots[m.id] = null;
+  if (!banners) return slots;
+
+  for (const [mountId, value] of Object.entries(banners)) {
+    if (!(mountId in slots)) continue;
+    if (value === null || typeof value === 'string') { slots[mountId] = value; continue; }
+    if (typeof value !== 'object') continue;
+    if (!value.enabled) { slots[mountId] = null; continue; }
+
+    const match = creatives.find(c =>
+      c.headline === value.headline && c.subline === value.subline && c.bg === value.bg);
+    if (match) { slots[mountId] = match.id; continue; }
+
+    const created = {
+      id: 'cr-' + Math.random().toString(36).slice(2, 8),
+      name: value.headline || mountId,
+      imageId: value.imageId || null,
+      headline: value.headline || '',
+      subline: value.subline || '',
+      bg: value.bg || '#9b5cf6',
+      fg: value.fg || '#120720',
+      promotedSku: value.promotedSku || null
+    };
+    creatives.push(created);
+    slots[mountId] = created.id;
+  }
+  return slots;
 }
 
 export function save(exp = cache) {
@@ -204,17 +254,52 @@ export function facingsOf(exp, variantId) {
   for (const [, sku] of Object.entries(v.planogram)) {
     if (sku) counts[sku] = (counts[sku] || 0) + 1;
   }
-  for (const b of Object.values(v.banners || {})) {
-    if (b.enabled && b.promotedSku) counts[b.promotedSku] = counts[b.promotedSku] || 0;
+  for (const b of activeBanners(exp, variantId)) {
+    if (b.promotedSku) counts[b.promotedSku] = counts[b.promotedSku] || 0;
   }
   return counts;
 }
 
+export function creativeById(exp, id) {
+  return (exp.creatives || []).find(c => c.id === id) || null;
+}
+
+/* The creative showing on one mount in one variant, or null if the surface is off. */
+export function bannerAt(exp, variantId, mountId) {
+  const slot = variant(exp, variantId).banners?.[mountId];
+  if (!slot) return null;
+  const creative = creativeById(exp, slot);
+  // mount id must win: everything downstream keys banner metrics on the surface,
+  // not on the creative that happens to be sitting there today
+  return creative ? { ...creative, id: mountId, mountId, creativeId: creative.id } : null;
+}
+
 export function activeBanners(exp, variantId) {
-  const v = variant(exp, variantId);
-  return Object.entries(v.banners || {})
-    .filter(([, b]) => b.enabled)
-    .map(([id, b]) => ({ id, ...b }));
+  return BANNER_MOUNTS
+    .map(m => bannerAt(exp, variantId, m.id))
+    .filter(Boolean);
+}
+
+export function setBanner(exp, variantId, mountId, creativeId) {
+  variant(exp, variantId).banners[mountId] = creativeId || null;
+  save(exp);
+}
+
+export function addCreative(exp, creative) {
+  exp.creatives = exp.creatives || [];
+  exp.creatives.push(creative);
+  save(exp);
+  return creative;
+}
+
+export function removeCreative(exp, creativeId) {
+  exp.creatives = (exp.creatives || []).filter(c => c.id !== creativeId);
+  for (const v of Object.values(exp.variants)) {
+    for (const mountId of Object.keys(v.banners || {})) {
+      if (v.banners[mountId] === creativeId) v.banners[mountId] = null;
+    }
+  }
+  save(exp);
 }
 
 /* ---------------- sessions ---------------- */
@@ -236,11 +321,14 @@ export function sessionsOf(exp, kind, variantId = null) {
 }
 
 export function exportJson(exp) {
-  return JSON.stringify(exp, null, 2);
+  const ids = (exp.creatives || []).map(c => c.imageId).filter(Boolean);
+  return JSON.stringify({ ...exp, _images: exportImages(ids) }, null, 2);
 }
 
 export function importJson(text) {
   const parsed = JSON.parse(text);
+  if (parsed._images) importImages(parsed._images);
+  delete parsed._images;
   cache = migrate(parsed);
   save();
   return cache;

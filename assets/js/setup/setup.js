@@ -6,6 +6,7 @@ import {
 } from '../core/config.js';
 import * as S from '../core/state.js';
 import { el, download, fmtMoney } from '../core/util.js';
+import { saveImage, getImage, deleteImage, storageUsedKb } from '../core/images.js';
 import { testConnection } from '../ai/hf-client.js';
 
 const exp = S.load();
@@ -174,60 +175,307 @@ function renderPalette() {
   }
 }
 
-/* ---------------- banners ---------------- */
+/* ---------------- retail media: drag a banner onto a spot ---------------- */
 
-function renderBanners() {
-  const host = $('bannerGrid');
+let draggingCreative = null;   // id being dragged, from the library or off a spot
+let editingCreative = null;
+
+function creativeStyle(c) {
+  const img = c.imageId ? getImage(c.imageId) : null;
+  return img
+    ? `background-image:url(${img});color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.85)`
+    : `background:linear-gradient(120deg, ${c.bg}, ${shadeHex(c.bg, -30)});color:${c.fg}`;
+}
+
+function shadeHex(hex, amt) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  if (Number.isNaN(n)) return hex;
+  const ch = i => Math.max(0, Math.min(255, ((n >> i) & 255) + amt));
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+}
+
+function renderCreatives() {
+  const host = $('creativeList');
   host.innerHTML = '';
-  const v = V();
+  const used = new Set(Object.values(V().banners || {}).filter(Boolean));
+
+  if (!exp.creatives.length) {
+    host.append(el('div', { class: 'empty tiny' }, 'No banners yet. Upload an image or press New banner.'));
+  }
+
+  for (const c of exp.creatives) {
+    const card = el('div', {
+      class: 'creative',
+      draggable: 'true',
+      'data-active': editingCreative === c.id ? '1' : '0',
+      title: 'Drag me onto a spot in the store',
+      ondragstart: e => {
+        draggingCreative = c.id;
+        e.dataTransfer.setData('text/plain', c.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      },
+      ondragend: () => { draggingCreative = null; }
+    });
+
+    card.append(el('div', { class: 'thumb', style: creativeStyle(c) },
+      el('b', {}, c.headline || c.name || 'Untitled'),
+      el('span', {}, c.subline || (c.imageId ? 'image banner' : ''))));
+
+    const foot = el('div', { class: 'foot' });
+    foot.append(el('span', {}, used.has(c.id) ? 'in the store' : 'not placed'));
+    const btns = el('div', { class: 'row', style: 'gap:4px' });
+    btns.append(el('button', {
+      class: 'small ghost',
+      onclick: () => { editingCreative = editingCreative === c.id ? null : c.id; renderMedia(); }
+    }, 'Edit'));
+    btns.append(el('button', {
+      class: 'small ghost',
+      onclick: () => {
+        if (!confirm(`Delete "${c.name || c.headline}" and take it off every spot?`)) return;
+        if (c.imageId) deleteImage(c.imageId);
+        S.removeCreative(exp, c.id);
+        if (editingCreative === c.id) editingCreative = null;
+        renderMedia(); renderMap();
+      }
+    }, '×'));
+    foot.append(btns);
+    card.append(foot);
+    host.append(card);
+  }
+}
+
+/* The spots are positioned the way they sit in the store, entrance at the bottom. */
+function renderBoard() {
+  const board = $('storeBoard');
+  board.innerHTML = '';
+
+  const plan = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  plan.setAttribute('class', 'floorplan');
+  plan.setAttribute('viewBox', '0 0 100 100');
+  plan.setAttribute('preserveAspectRatio', 'none');
+  plan.innerHTML = `
+    <rect x="14" y="34" width="10" height="34" rx="2" fill="#241640" stroke="#3a2263" stroke-width=".4"/>
+    <rect x="45" y="34" width="10" height="34" rx="2" fill="#241640" stroke="#3a2263" stroke-width=".4"/>
+    <rect x="76" y="34" width="10" height="34" rx="2" fill="#241640" stroke="#3a2263" stroke-width=".4"/>
+    <text x="50" y="97" fill="#8d7bb0" font-size="3.4" text-anchor="middle">entrance</text>`;
+  board.append(plan);
+
+  const pos = {
+    'wall-back':     { x: 50, y: 12 },
+    'aisle-1-head':  { x: 19, y: 40 },
+    'aisle-3-head':  { x: 81, y: 40 },
+    'screen-island': { x: 50, y: 56 },
+    'floor-decal':   { x: 50, y: 76 },
+    'entrance-arch': { x: 50, y: 90 }
+  };
+
   for (const mount of BANNER_MOUNTS) {
-    const b = v.banners[mount.id];
-    const card = el('div', { class: 'banner-card' });
-    const head = el('header');
-    head.append(el('h4', {}, mount.label));
-    const sw = el('label', { class: 'switch' });
-    const cb = el('input', { type: 'checkbox' });
-    cb.checked = !!b.enabled;
-    cb.addEventListener('change', () => { b.enabled = cb.checked; S.save(exp); renderBanners(); renderMap(); });
-    sw.append(cb, el('span', { class: 'tiny' }, b.enabled ? 'live' : 'off'));
-    head.append(sw);
-    card.append(head);
+    const p = pos[mount.id] || { x: 50, y: 50 };
+    const placed = S.bannerAt(exp, exp.activeVariant, mount.id);
 
-    card.append(el('div', {
-      class: 'banner-preview',
-      style: `background:${b.bg};color:${b.fg}`
-    }, el('b', {}, b.headline || 'Untitled'), el('span', {}, b.subline || '')));
+    const spot = el('div', {
+      class: 'spot' + (placed ? ' filled' : ''),
+      style: `left:${p.x}%; top:${p.y}%`,
+      draggable: placed ? 'true' : 'false',
+      ondragstart: e => {
+        if (!placed) return;
+        draggingCreative = placed.creativeId;
+        e.dataTransfer.setData('text/plain', placed.creativeId);
+      },
+      ondragover: e => { e.preventDefault(); spot.classList.add('over'); },
+      ondragleave: () => spot.classList.remove('over'),
+      ondrop: e => {
+        e.preventDefault();
+        spot.classList.remove('over');
+        const id = e.dataTransfer.getData('text/plain') || draggingCreative;
+        if (!id) return;
+        S.setBanner(exp, exp.activeVariant, mount.id, id);
+        renderMedia(); renderMap();
+      },
+      onclick: () => {
+        if (placed) { editingCreative = placed.creativeId; renderMedia(); }
+        else if (exp.creatives.length) {
+          S.setBanner(exp, exp.activeVariant, mount.id, exp.creatives[0].id);
+          renderMedia(); renderMap();
+        }
+      }
+    });
 
-    const mk = (label, key, type = 'text') => {
-      const lab = el('label', { class: 'field' }, el('span', {}, label));
-      const input = el('input', { type });
-      input.value = b[key] ?? '';
-      input.addEventListener('input', () => { b[key] = input.value; S.save(exp); renderBanners(); });
-      lab.append(input);
-      return lab;
-    };
-    card.append(mk('Headline', 'headline'), mk('Sub-line', 'subline'));
-
-    const sel = el('select');
-    sel.append(el('option', { value: '' }, 'Promotes no specific SKU'));
-    for (const p of PRODUCTS) {
-      const o = el('option', { value: p.id }, `${p.name} (${p.category})`);
-      if (b.promotedSku === p.id) o.selected = true;
-      sel.append(o);
+    spot.append(el('div', { class: 'where' }, mount.label));
+    if (placed) {
+      spot.append(el('div', { class: 'art', style: creativeStyle(placed) },
+        placed.headline || placed.name || ''));
+      const sku = placed.promotedSku ? productById(placed.promotedSku) : null;
+      spot.append(el('div', { class: 'tiny muted' }, sku ? `sells ${sku.name}` : 'no SKU attached'));
+      spot.append(el('button', {
+        class: 'kill', title: 'Switch this spot off',
+        onclick: e => {
+          e.stopPropagation();
+          S.setBanner(exp, exp.activeVariant, mount.id, null);
+          renderMedia(); renderMap();
+        }
+      }, '×'));
+    } else {
+      spot.append(el('div', { class: 'tiny muted' }, 'empty — drop a banner here'));
     }
-    sel.addEventListener('change', () => { b.promotedSku = sel.value || null; S.save(exp); });
-    card.append(el('label', { class: 'field' }, el('span', {}, 'Attributed SKU'), sel));
+    board.append(spot);
+  }
 
+  const live = S.activeBanners(exp, exp.activeVariant).length;
+  $('mediaCount').textContent = `${live} of ${BANNER_MOUNTS.length} spots live in ${V().name}`;
+}
+
+/* The editor only appears once you pick a banner to change. */
+function renderCreativeEditor() {
+  const host = $('creativeEditor');
+  const c = exp.creatives.find(x => x.id === editingCreative);
+  if (!c) { host.hidden = true; host.innerHTML = ''; return; }
+
+  host.hidden = false;
+  host.innerHTML = '';
+  host.append(el('hr', { class: 'divider' }));
+  host.append(el('div', { class: 'spread', style: 'margin-bottom:10px' },
+    el('h3', {}, `Editing: ${c.name || c.headline}`),
+    el('button', { class: 'small ghost', onclick: () => { editingCreative = null; renderMedia(); } }, 'Done')));
+
+  const grid = el('div', { class: 'grid c2' });
+
+  const preview = el('div', {});
+  preview.append(el('div', {
+    class: 'banner-preview',
+    style: creativeStyle(c) + ';border-radius:10px;padding:16px;min-height:96px;display:flex;flex-direction:column;justify-content:center'
+  }, el('b', { style: 'display:block;font-size:1.15rem' }, c.headline || ''), el('span', {}, c.subline || '')));
+
+  const imgRow = el('div', { class: 'row' });
+  const upl = el('input', { type: 'file', accept: 'image/*', hidden: 'hidden' });
+  upl.addEventListener('change', async () => {
+    const file = upl.files?.[0];
+    if (!file) return;
+    try {
+      const saved = await saveImage(file);
+      if (c.imageId) deleteImage(c.imageId);
+      c.imageId = saved.id;
+      S.save(exp);
+      renderMedia(); renderMap();
+    } catch (err) { alert(err.message); }
+  });
+  imgRow.append(upl);
+  imgRow.append(el('button', { class: 'small', onclick: () => upl.click() },
+    c.imageId ? 'Replace image' : 'Use my own image'));
+  if (c.imageId) {
+    imgRow.append(el('button', {
+      class: 'small ghost',
+      onclick: () => { deleteImage(c.imageId); c.imageId = null; S.save(exp); renderMedia(); renderMap(); }
+    }, 'Remove image'));
+  }
+  preview.append(imgRow);
+  if (c.imageId) {
+    preview.append(el('p', { class: 'tiny muted', style: 'margin-top:8px' },
+      'Your image is used as the banner artwork in the 3D store. The text below still shows in this editor so you can label it.'));
+  }
+  grid.append(preview);
+
+  const fields = el('div', {});
+  const text = (label, key) => {
+    const lab = el('label', { class: 'field' }, el('span', {}, label));
+    const input = el('input', { type: 'text' });
+    input.value = c[key] ?? '';
+    input.addEventListener('input', () => { c[key] = input.value; S.save(exp); renderCreatives(); renderBoard(); });
+    input.addEventListener('change', () => renderMedia());
+    lab.append(input);
+    return lab;
+  };
+  fields.append(text('Name (just for you)', 'name'), text('Headline', 'headline'), text('Sub-line', 'subline'));
+
+  const sel = el('select');
+  sel.append(el('option', { value: '' }, 'Not selling a specific product'));
+  for (const p of PRODUCTS) {
+    const o = el('option', { value: p.id }, `${p.name} (${p.category})`);
+    if (c.promotedSku === p.id) o.selected = true;
+    sel.append(o);
+  }
+  sel.addEventListener('change', () => { c.promotedSku = sel.value || null; S.save(exp); renderMedia(); });
+  fields.append(el('label', { class: 'field' },
+    el('span', {}, 'Which product does this banner sell?'), sel));
+  fields.append(el('p', { class: 'tiny muted' },
+    'Gaze time on this banner is credited to that product, which is how the report tells you whether the media did anything.'));
+
+  if (!c.imageId) {
     const colours = el('div', { class: 'row' });
     for (const [label, key] of [['Background', 'bg'], ['Text', 'fg']]) {
       const inp = el('input', { type: 'color', style: 'width:52px;height:34px;padding:2px' });
-      inp.value = b[key];
-      inp.addEventListener('input', () => { b[key] = inp.value; S.save(exp); renderBanners(); });
+      inp.value = c[key];
+      inp.addEventListener('input', () => { c[key] = inp.value; S.save(exp); renderCreatives(); renderBoard(); });
+      inp.addEventListener('change', () => renderMedia());
       colours.append(el('label', { class: 'tiny muted' }, label), inp);
     }
-    card.append(colours);
-    host.append(card);
+    fields.append(colours);
   }
+  grid.append(fields);
+  host.append(grid);
+}
+
+async function handleFiles(files) {
+  for (const file of files) {
+    try {
+      const saved = await saveImage(file);
+      const c = {
+        id: 'cr-' + Math.random().toString(36).slice(2, 8),
+        name: file.name.replace(/\.[^.]+$/, '').slice(0, 40),
+        imageId: saved.id,
+        headline: file.name.replace(/\.[^.]+$/, '').slice(0, 24),
+        subline: '',
+        bg: '#9b5cf6', fg: '#120720',
+        promotedSku: null
+      };
+      S.addCreative(exp, c);
+      editingCreative = c.id;
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+  renderMedia();
+}
+
+function wireMedia() {
+  $('addCreative').addEventListener('click', () => {
+    const c = {
+      id: 'cr-' + Math.random().toString(36).slice(2, 8),
+      name: 'New banner', imageId: null,
+      headline: 'Your headline', subline: 'Your sub-line',
+      bg: '#ff4fa3', fg: '#120720', promotedSku: null
+    };
+    S.addCreative(exp, c);
+    editingCreative = c.id;
+    renderMedia();
+  });
+
+  const zone = $('uploadZone');
+  const input = $('bannerFile');
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { handleFiles([...input.files]); input.value = ''; });
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('over');
+    if (e.dataTransfer.files?.length) handleFiles([...e.dataTransfer.files]);
+    else if (draggingCreative) {
+      // dragged off a spot and back to the library: take it out of the store
+      for (const m of BANNER_MOUNTS) {
+        if (V().banners[m.id] === draggingCreative) V().banners[m.id] = null;
+      }
+      S.save(exp);
+      renderMedia(); renderMap();
+    }
+  });
+}
+
+function renderMedia() {
+  renderCreatives();
+  renderBoard();
+  renderCreativeEditor();
+  $('storageNote').textContent = `Uploaded artwork is using ${storageUsedKb()} kB of browser storage.`;
 }
 
 /* ---------------- pricing ---------------- */
@@ -375,10 +623,10 @@ function renderMap() {
     parts.push(`<text x="${sx(f.x)}" y="${sz(f.z) + 26}" fill="#8d7bb0" font-size="9" text-anchor="middle">${f.id}</text>`);
   }
 
-  for (const m of BANNER_MOUNTS) {
-    const b = v.banners[m.id];
-    if (!b?.enabled) continue;
-    parts.push(`<rect x="${sx(m.x) - 18}" y="${sz(m.z) - 5}" width="36" height="10" rx="3" fill="${b.bg}" opacity=".9"/>`);
+  for (const b of S.activeBanners(exp, exp.activeVariant)) {
+    const m = BANNER_MOUNTS.find(x => x.id === b.id);
+    if (!m) continue;
+    parts.push(`<rect x="${sx(m.x) - 18}" y="${sz(m.z) - 5}" width="36" height="10" rx="3" fill="${b.imageId ? '#f2e9ff' : b.bg}" opacity=".9"/>`);
   }
 
   parts.push(`<circle cx="${sx(STORE.spawn.x)}" cy="${sz(STORE.spawn.z)}" r="6" fill="#ff4fa3"/>`);
@@ -429,11 +677,12 @@ function renderAll() {
   renderBayTabs();
   renderShelf();
   renderPalette();
-  renderBanners();
+  renderMedia();
   renderPrices();
   renderTask();
   renderPersonas();
   renderHf();
   renderMap();
 }
+wireMedia();
 renderAll();

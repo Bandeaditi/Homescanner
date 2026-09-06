@@ -38,9 +38,16 @@ Everything except that one layer runs with no API keys at all.
 ## The four screens
 
 **Set up store** (`index.html`) — the planogram editor. Drag a product onto any of the 106 facings,
-switch retail media surfaces on and off, write the creative, set prices and promotions, and define
-the shopper task. Two variants (A and B) hold independent layouts, so you always have something to
-test against. A top-down map shows what you have built.
+set prices and promotions, and define the shopper task. Two variants (A and B) hold independent
+layouts, so you always have something to test against.
+
+Retail media works as a library plus a board. Drop your own image files into the upload area (or
+press *New banner* to write one), then drag a banner from the library onto any of the six spots in
+the store diagram — entrance arch, back wall, two aisle headers, the island screen, the floor decal.
+A spot with nothing on it is simply off; drag a spot back to the library or press its × to clear it.
+Attach a product to each banner and the gaze time it earns is credited to that product, which is how
+the report works out whether the media did anything. Uploads are downscaled to about 60 kB and stored
+in the browser, and they travel with the experiment when you export it.
 
 **Run a shopper** (`store.html`) — you walk the store in first person. Webcam gaze tracking starts
 with a five-dot calibration; after that a pink dot shows where the system thinks you are looking, and
@@ -51,9 +58,11 @@ at the checkout pad with `F`.
 With the model switched on, each persona reads the shelf in character first and returns its own
 attention bias and reasoning, which you can read on the page.
 
-**Results** (`results.html`) — the comparison. A fidelity score out of 100, its six components, paired
-attention and choice charts, the paths both panels walked overlaid on the store, media performance,
-the A/B read-out, and the automatically generated findings.
+**Results** (`results.html`) — the comparison. It opens in *Plain English*: a three-sentence verdict at
+the top, then a score out of 100 broken into six things anyone can read ("looked at the same
+products", "bought the same things"), paired pink/purple charts, banner performance, the A/B
+read-out and the findings. Switch to *Everything* for the underlying statistics — correlations,
+divergences, path overlays and the cost comparison.
 
 ---
 
@@ -137,6 +146,7 @@ With the model on, it rewrites those findings as a short readout — it never in
 | Success criterion | Where it lives |
 |---|---|
 | Functional browser-based virtual store | `store.html`, `assets/js/store/scene.js` — procedural 3D store, 9 fixtures, 106 facings, 6 media surfaces |
+| Own banner artwork | Upload in setup, rendered on the 3D surface (`assets/js/core/images.js`) |
 | Webcam gaze and engagement | `assets/js/store/gaze.js` — MediaPipe + 5-point calibrated linear model |
 | Dwell, interactions, paths, purchases | `assets/js/store/session.js` |
 | AI personas navigating autonomously | `assets/js/ai/sim-engine.js` |

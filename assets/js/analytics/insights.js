@@ -2,7 +2,7 @@
    manager would act on. Rules first, so every claim points at a number;
    the language model, when switched on, only rewrites the summary. */
 
-import { PRODUCTS, SHELF_LEVELS, SLOTS_PER_LEVEL, BAYS, productById } from '../core/config.js';
+import { PRODUCTS, SHELF_LEVELS, SLOTS_PER_LEVEL, BAYS, BANNER_MOUNTS, productById } from '../core/config.js';
 import * as S from '../core/state.js';
 import { normalise, fmtPct } from '../core/util.js';
 import { chat } from '../ai/hf-client.js';
@@ -67,10 +67,10 @@ export function buildInsights(exp, { real, synth, comparison, variantId, other }
     (mediaBySku[banner.promotedSku] ||= []).push(banner);
   }
   for (const [sku, surfaces] of Object.entries(mediaBySku)) {
-    const banner = {
-      id: surfaces.length === 1 ? surfaces[0].id : `${surfaces.length} surfaces`,
-      promotedSku: sku
-    };
+    const label = surfaces.length === 1
+      ? (BANNER_MOUNTS.find(m => m.id === surfaces[0].id)?.label || surfaces[0].id).toLowerCase()
+      : `${surfaces.length} media surfaces`;
+    const banner = { id: label, promotedSku: sku };
     const p = productById(sku);
     const exposure = surfaces.reduce((s, b) => s + (panel.bannerShare[b.id] || 0), 0);
     const att = panel.attentionShare[sku] || 0;
@@ -87,14 +87,14 @@ export function buildInsights(exp, { real, synth, comparison, variantId, other }
           ? `${p.name} converts the attention its media buys`
           : `${p.name} wins attention but loses the decision`,
         body: converts
-          ? `On ${banner.id} the SKU pulled ${fmtPct(att)} of shelf attention against a ${fmtPct(expected)} fair share of facings, and closed ${fmtPct(conv)} of the shoppers who looked — at or above the ${fmtPct(avgConv)} store average.`
-          : `The creative did its job at the top of the funnel — ${overIndex.toFixed(1)}× fair share of attention — but only ${fmtPct(conv)} of shoppers who looked went on to buy, against a ${fmtPct(avgConv)} store average. The loss is at the shelf, not in the media.`,
+          ? `On the ${banner.id} the SKU pulled ${fmtPct(att)} of shelf attention against a ${fmtPct(expected)} fair share of facings, and closed ${fmtPct(conv)} of the shoppers who looked — at or above the ${fmtPct(avgConv)} store average.`
+          : `The creative on the ${banner.id} did its job at the top of the funnel — ${overIndex.toFixed(1)}× fair share of attention — but only ${fmtPct(conv)} of shoppers who looked went on to buy, against a ${fmtPct(avgConv)} store average. The loss is at the shelf, not in the media.`,
         evidence: `banner exposure share ${fmtPct(exposure)}`
       });
     } else if (expected > 0) {
       out.push({
         severity: 'risk',
-        title: `The ${banner.id} creative is not moving eyes to ${p.name}`,
+        title: `The ${banner.id} is not moving eyes to ${p.name}`,
         body: `Attention on the SKU (${fmtPct(att)}) sits at or below its ${fmtPct(expected)} share of facings, so the media is not adding anything measurable. Test a different placement or a pack-forward creative before spending more on it.`,
         evidence: `exposure share ${fmtPct(exposure)}`
       });

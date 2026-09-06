@@ -95,18 +95,24 @@ export function compare(real, synth) {
   const basketRatio = real.avgItems ? synth.avgItems / real.avgItems : 0;
 
   const components = [
-    { id: 'attention-corr', label: 'Attention share correlation', value: Math.max(0, attentionCorr), weight: 0.28,
-      detail: `Pearson r = ${attentionCorr.toFixed(2)} across ${keys.length} SKUs` },
-    { id: 'attention-top3', label: 'Top-3 attention overlap', value: attentionTop3, weight: 0.14,
-      detail: 'Do the same three facings win the eye?' },
-    { id: 'attention-jsd', label: 'Attention distribution match', value: 1 - attentionJsd, weight: 0.16,
+    { id: 'attention-corr', label: 'Looked at the same products', value: Math.max(0, attentionCorr), weight: 0.28,
+      plain: 'The products that pulled human eyes also pulled AI eyes.',
+      detail: `attention share correlation, Pearson r = ${attentionCorr.toFixed(2)} across ${keys.length} SKUs` },
+    { id: 'attention-top3', label: 'Agreed on the top three', value: attentionTop3, weight: 0.14,
+      plain: 'The three most-looked-at products are the same three.',
+      detail: 'top-3 attention overlap' },
+    { id: 'attention-jsd', label: 'Split attention the same way', value: 1 - attentionJsd, weight: 0.16,
+      plain: 'Not just the winners — the whole spread of attention lines up.',
       detail: `Jensen–Shannon divergence ${attentionJsd.toFixed(3)}` },
-    { id: 'purchase-tvd', label: 'Share-of-choice match', value: 1 - purchaseTvd, weight: 0.22,
-      detail: `Total variation distance ${purchaseTvd.toFixed(3)}` },
-    { id: 'zone-jsd', label: 'Store coverage match', value: 1 - zoneJsd, weight: 0.10,
-      detail: 'Time split across aisles, endcaps and features' },
-    { id: 'sequence', label: 'Route similarity', value: seq, weight: 0.10,
-      detail: 'Edit distance between zone visit orders' }
+    { id: 'purchase-tvd', label: 'Bought the same things', value: 1 - purchaseTvd, weight: 0.22,
+      plain: 'What ended up in the basket matches.',
+      detail: `share-of-choice, total variation distance ${purchaseTvd.toFixed(3)}` },
+    { id: 'zone-jsd', label: 'Spent time in the same places', value: 1 - zoneJsd, weight: 0.10,
+      plain: 'Time split across aisles, endcaps and the island matches.',
+      detail: `zone dwell, Jensen–Shannon divergence ${zoneJsd.toFixed(3)}` },
+    { id: 'sequence', label: 'Walked a similar route', value: seq, weight: 0.10,
+      plain: 'They went round the store in roughly the same order.',
+      detail: 'normalised edit distance between zone visit orders' }
   ];
 
   const fidelity = components.reduce((s, c) => s + c.value * c.weight, 0) * 100;

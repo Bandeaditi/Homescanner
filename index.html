@@ -85,15 +85,58 @@
   .pal-item .nm { font-size: .83rem; line-height: 1.2; }
   .pal-item .meta { font-size: .72rem; color: var(--muted); }
 
-  .banner-card { border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 14px; background: var(--panel-2); }
-  .banner-card header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .banner-card h4 { font-size: .93rem; }
-  .banner-preview {
-    border-radius: 8px; padding: 12px 14px; margin-bottom: 11px;
-    font-family: var(--display); line-height: 1.15;
+  .media-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .media-layout { grid-template-columns: 1fr; } }
+
+  .creative-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow: auto; padding-right: 4px; }
+  .creative {
+    border: 1px solid var(--line-soft); border-radius: var(--r-md);
+    background: var(--panel-2); cursor: grab; overflow: hidden;
   }
-  .banner-preview b { display: block; font-size: 1.1rem; }
-  .banner-preview span { font-size: .8rem; opacity: .82; }
+  .creative:hover { border-color: var(--violet); }
+  .creative[data-active="1"] { border-color: var(--pink); }
+  .creative .thumb {
+    height: 54px; background-size: cover; background-position: center;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 11px; font-family: var(--display); line-height: 1.1;
+  }
+  .creative .thumb b { font-size: .88rem; }
+  .creative .thumb span { font-size: .68rem; opacity: .82; }
+  .creative .foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 9px; font-size: .72rem; color: var(--muted); }
+  .creative .foot button { padding: 2px 8px; font-size: .68rem; }
+
+  .dropzone-upload {
+    display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center;
+    margin-top: 10px; padding: 18px 12px; text-align: center; cursor: pointer;
+    border: 1px dashed var(--line); border-radius: var(--r-md); color: var(--text-2);
+  }
+  .dropzone-upload.over { border-color: var(--pink); background: rgba(255,79,163,.1); }
+  .dropzone-upload b { font-size: .85rem; }
+
+  .store-board {
+    position: relative; border: 1px solid var(--line-soft); border-radius: var(--r-md);
+    background:
+      linear-gradient(180deg, rgba(155,92,246,.10), transparent 45%),
+      var(--deep);
+    height: 430px; overflow: hidden;
+  }
+  .store-board .floorplan { position: absolute; inset: 0; opacity: .5; }
+  .spot {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 150px; min-height: 62px;
+    border: 1px dashed var(--line); border-radius: 10px;
+    background: rgba(23,12,43,.9);
+    padding: 7px 9px; font-size: .72rem; color: var(--muted);
+    display: flex; flex-direction: column; gap: 3px; justify-content: center;
+    transition: border-color .15s, background .15s;
+  }
+  .spot .where { font-size: .68rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .spot.filled { border-style: solid; border-color: var(--violet-dim); cursor: grab; }
+  .spot.over { border-color: var(--pink); background: rgba(255,79,163,.18); }
+  .spot .art { height: 30px; border-radius: 5px; background-size: cover; background-position: center;
+               display: flex; align-items: center; padding: 0 7px; font-family: var(--display); font-size: .74rem; overflow: hidden; }
+  .spot .kill { position: absolute; top: 3px; right: 4px; border: 0; background: transparent; color: var(--muted); padding: 2px 5px; font-size: .8rem; line-height: 1; }
+  .spot .kill:hover { color: var(--pink); background: transparent; }
 
   .price-table td input[type="number"] { width: 92px; padding: 5px 8px; }
   .persona-row { display: grid; grid-template-columns: 12px minmax(0,1fr) 78px; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
@@ -162,9 +205,38 @@
       <section class="panel">
         <header>
           <h2>Retail media</h2>
-          <p>Each surface is a measurable exposure. Gaze time on it is attributed to the SKU it promotes.</p>
+          <p>Upload your banners on the left, then drag one onto a spot in the store.</p>
         </header>
-        <div class="grid c2" id="bannerGrid"></div>
+
+        <div class="media-layout">
+          <div>
+            <div class="spread" style="margin-bottom:10px">
+              <b class="tiny muted">YOUR BANNERS</b>
+              <button class="small" id="addCreative">+ New banner</button>
+            </div>
+            <div id="creativeList" class="creative-list"></div>
+            <label class="dropzone-upload" id="uploadZone">
+              <input type="file" id="bannerFile" accept="image/*" multiple hidden>
+              <b>Drop image files here</b>
+              <span class="tiny muted">or click to browse — JPG, PNG or WEBP</span>
+            </label>
+            <p class="tiny muted" id="storageNote"></p>
+          </div>
+
+          <div>
+            <div class="spread" style="margin-bottom:10px">
+              <b class="tiny muted">WHERE THEY GO IN THE STORE</b>
+              <span class="tiny muted" id="mediaCount"></span>
+            </div>
+            <div class="store-board" id="storeBoard"></div>
+            <p class="tiny muted" style="margin-top:10px">
+              Drag a banner from the left onto any spot. Drag a spot back to the left, or press its ×, to switch it off.
+              Spots are laid out the way you meet them walking in: the entrance is at the bottom.
+            </p>
+          </div>
+        </div>
+
+        <div id="creativeEditor" hidden></div>
       </section>
 
       <section class="panel">

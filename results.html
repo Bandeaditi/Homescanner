@@ -43,10 +43,20 @@
   .insight h3 { font-size: .98rem; margin-bottom: 5px; }
   .insight p { font-size: .87rem; color: var(--text-2); margin: 0 0 6px; }
   .legend { display: flex; gap: 16px; font-size: .8rem; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: transparent; padding: 8px 14px; font-size: .84rem; }
+  .seg button.on { background: linear-gradient(120deg, var(--violet), var(--pink)); color: #14061f; font-weight: 600; }
+  body.simple .advanced { display: none; }
+  body.simple .comp .det { display: none; }
+  .verdict-panel { border-color: var(--line); background: linear-gradient(150deg, rgba(255,79,163,.12), rgba(155,92,246,.10)), var(--panel); }
+  .verdict-line { font-size: 1.02rem; line-height: 1.6; color: var(--text); margin-bottom: 10px; }
+  .verdict-line:last-child { margin-bottom: 0; }
+  .verdict-line b { color: var(--pink); font-weight: 600; }
+  .comp .plain { font-size: .78rem; color: var(--text-2); }
   .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; }
 </style>
 </head>
-<body class="app">
+<body class="app simple">
 <header class="topbar">
   <a class="brand" href="index.html"><span class="mark"></span> ShopperLab</a>
   <nav class="nav"></nav>
@@ -60,6 +70,10 @@
     </div>
     <div class="row">
       <label class="field" style="margin:0"><span>Variant</span><select id="variantSel"></select></label>
+      <div class="seg" id="detailToggle">
+        <button data-mode="simple" class="on">Plain English</button>
+        <button data-mode="full">Everything</button>
+      </div>
       <button id="exportCsv">Export CSV</button>
       <button id="exportJson">Export sessions</button>
     </div>
@@ -70,8 +84,13 @@
   </div>
 
   <div id="content">
+    <section class="panel verdict-panel">
+      <header><h2>The short version</h2><p>Everything below in three sentences.</p></header>
+      <div id="verdict"></div>
+    </section>
+
     <section class="panel">
-      <header><h2>Can the synthetic panel stand in for people?</h2>
+      <header><h2>Can the AI shoppers stand in for people?</h2>
         <p>One score, built from six independent agreements between the two panels.</p></header>
       <div class="fidelity">
         <div class="dial" id="dial"></div>
@@ -87,8 +106,8 @@
 
     <section class="panel">
       <header>
-        <h2>Where attention went</h2>
-        <p>Share of total shelf gaze per SKU.</p>
+        <h2>What shoppers looked at</h2>
+        <p>Longer bar means more time spent looking at that product. Pink is real people, purple is the AI panel — if the two bars are about the same length, the AI got that product right.</p>
         <span class="legend" style="margin-left:auto"><span><i style="background:var(--pink)"></i>real</span><span><i style="background:var(--violet)"></i>synthetic</span></span>
       </header>
       <div id="attentionChart"></div>
@@ -96,42 +115,42 @@
 
     <div class="grid c2">
       <section class="panel">
-        <header><h2>What went in the basket</h2><p>Share of all units bought.</p></header>
+        <header><h2>What shoppers bought</h2><p>Share of everything bought. Same idea: matching bar lengths mean the AI predicted that product's sales correctly.</p></header>
         <div id="purchaseChart"></div>
       </section>
       <section class="panel">
-        <header><h2>Where the time went</h2><p>Share of trip time by store zone.</p></header>
+        <header><h2>Where they spent their time</h2><p>Which parts of the store held people, and whether the AI wandered the same way.</p></header>
         <div id="zoneChart"></div>
       </section>
     </div>
 
     <div class="grid c2">
-      <section class="panel">
+      <section class="panel advanced">
         <header><h2>Paths walked</h2><p>Every recorded route, overlaid on the store.</p></header>
         <svg id="pathMap" viewBox="0 0 520 400" class="map" style="width:100%;border:1px solid var(--line-soft);border-radius:14px;background:var(--deep)"></svg>
       </section>
       <section class="panel">
-        <header><h2>Retail media</h2><p>Gaze on each surface and what it did for the SKU it carries.</p></header>
+        <header><h2>Did the banners work?</h2><p>How long eyes rested on each banner, and how many of the people who looked at its product ended up buying it.</p></header>
         <div id="mediaTable"></div>
       </section>
     </div>
 
     <section class="panel">
-      <header><h2>A/B read-out</h2><p>What the layout change did, and whether both panels agree it happened.</p></header>
+      <header><h2>Variant A versus variant B</h2><p>What changing the layout did to each product, and whether the AI panel saw the same change the humans did.</p></header>
       <div id="abBlock"></div>
     </section>
 
     <section class="panel">
       <header>
         <h2>What to do about it</h2>
-        <p>Generated from the numbers above, ordered by urgency.</p>
+        <p>Written from the numbers above. Red first, then amber, then what is working.</p>
         <button class="small" id="narrateBtn" style="margin-left:auto">Write the summary with the model</button>
       </header>
       <div id="narrative"></div>
       <div class="stack" id="insights" style="margin-top:14px"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel advanced">
       <header><h2>Against a physical test</h2><p>Same read, same store, different instrument.</p></header>
       <div class="grid c4" id="economics"></div>
       <p class="tiny muted" style="margin-top:12px">Physical benchmark assumes a $100k, ten-week controlled store

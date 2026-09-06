@@ -16,7 +16,16 @@ for (const key of Object.keys(exp.variants)) {
   if (key === exp.activeVariant) o.selected = true;
   sel.append(o);
 }
-sel.addEventListener('change', () => { exp.activeVariant = sel.value; S.save(exp); render(); });
+sel.addEventListener('change', () => { exp.activeVariant = sel.value; S.save(exp); /* ---------- detail level ---------- */
+
+for (const btn of document.querySelectorAll('#detailToggle button')) {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#detailToggle button').forEach(b => b.classList.toggle('on', b === btn));
+    document.body.classList.toggle('simple', btn.dataset.mode === 'simple');
+  });
+}
+
+render(); });
 
 let state = {};
 
@@ -50,6 +59,7 @@ function render() {
 
   state = { variantId, real, synth, comparison, other, realS, synthS };
 
+  renderVerdict(real, synth, comparison, variantId);
   renderFidelity(comparison);
   renderHeadline(real, synth, comparison);
   renderPaired('attentionChart', real.attentionShare, synth.attentionShare);
@@ -60,6 +70,50 @@ function render() {
   renderAb(variantId, real, synth, other);
   renderInsights(variantId, real, synth, comparison, other);
   renderEconomics(realS.length, synthS.length);
+}
+
+/* ---------- the short version ----------
+   Three sentences, no statistics: what was run, how well the AI matched, what to
+   do with that. Everything here is read off the same numbers shown below. */
+
+function renderVerdict(real, synth, comparison, variantId) {
+  const name = exp.variants[variantId].name;
+  const lines = [];
+
+  lines.push(`<div class="verdict-line"><b>${real.n}</b> real ${real.n === 1 ? 'person' : 'people'} and <b>${synth.n}</b> AI shoppers walked ${name}.</div>`);
+
+  if (!comparison) {
+    lines.push(`<div class="verdict-line">There is nothing to compare yet — you need at least one real trip and one AI panel run on the same variant. ${real.n ? 'Run the AI panel next.' : 'Walk the store next.'}</div>`);
+    $('verdict').innerHTML = lines.join('');
+    return;
+  }
+
+  const best = [...comparison.components].sort((a, b) => b.value - a.value)[0];
+  const worst = [...comparison.components].sort((a, b) => a.value - b.value)[0];
+  lines.push(`<div class="verdict-line">The AI panel matched the real shoppers <b>${comparison.fidelity.toFixed(0)} out of 100</b>. It did best at "${best.label.toLowerCase()}" and worst at "${worst.label.toLowerCase()}".</div>`);
+
+  const rows = skuTable(real, synth);
+  const over = rows.filter(r => r.gap > 0.04).sort((a, b) => b.gap - a.gap)[0];
+  const under = rows.filter(r => r.gap < -0.04).sort((a, b) => a.gap - b.gap)[0];
+  const misses = [];
+  if (over) misses.push(`overrates ${over.name}`);
+  if (under) misses.push(`underrates ${under.name}`);
+
+  const advice = comparison.fidelity >= 82
+    ? 'You can use the AI panel on its own to screen layouts before testing anything with people.'
+    : comparison.fidelity >= 68
+      ? 'Trust it to rank which layout wins, but do not quote its exact percentages.'
+      : comparison.fidelity >= 52
+        ? 'Use it to spot ideas worth testing, then confirm the winner with real shoppers.'
+        : 'It is not calibrated for this store yet — collect more real trips before relying on it.';
+
+  lines.push(`<div class="verdict-line">${misses.length ? `It ${misses.join(' and ')}. ` : ''}${advice}</div>`);
+
+  if (real.n < 8) {
+    lines.push(`<div class="verdict-line muted tiny" style="color:var(--muted)">Only ${real.n} real ${real.n === 1 ? 'session' : 'sessions'} so far, so treat the score as a first read rather than proof. Around 20 gives a stable number.</div>`);
+  }
+
+  $('verdict').innerHTML = lines.join('');
 }
 
 /* ---------- fidelity dial ---------- */
@@ -93,7 +147,8 @@ function renderFidelity(c) {
     <div class="comp">
       <div>
         <div class="lbl">${comp.label}</div>
-        <div class="det">${comp.detail} · weight ${(comp.weight * 100).toFixed(0)}%</div>
+        <div class="plain">${comp.plain || ''}</div>
+        <div class="det">${comp.detail} · counts for ${(comp.weight * 100).toFixed(0)}% of the score</div>
         <div class="track"><i style="width:${Math.round(comp.value * 100)}%"></i></div>
       </div>
       <div class="num">${(comp.value * 100).toFixed(0)}%</div>
@@ -243,7 +298,7 @@ function renderAb(variantId, real, synth, other) {
     }).join('')}</tbody></table>`;
 
   const head = agreement ? `
-    <div class="grid c3" style="margin-bottom:14px">
+    <div class="grid c3 advanced" style="margin-bottom:14px">
       <div class="stat"><div class="k" style="font-size:1.5rem">${fmtPct(agreement.directionalAgreement)}</div><div class="l">Directional agreement on movers</div></div>
       <div class="stat"><div class="k" style="font-size:1.5rem">${agreement.correlation.toFixed(2)}</div><div class="l">Correlation of attention deltas</div></div>
       <div class="stat"><div class="k" style="font-size:1.5rem">${agreement.moved}</div><div class="l">SKUs that actually moved</div></div>
@@ -318,5 +373,14 @@ $('exportCsv').addEventListener('click', () => {
   }
   download(`shopperlab-${state.variantId}.csv`, lines.join('\n'), 'text/csv');
 });
+
+/* ---------- detail level ---------- */
+
+for (const btn of document.querySelectorAll('#detailToggle button')) {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#detailToggle button').forEach(b => b.classList.toggle('on', b === btn));
+    document.body.classList.toggle('simple', btn.dataset.mode === 'simple');
+  });
+}
 
 render();

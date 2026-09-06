@@ -89,6 +89,24 @@ function bannerTexture(b, mount) {
   c.height = Math.max(160, Math.round(1024 / ratio));
   const g = c.getContext('2d');
 
+  const uploaded = b.imageId ? getImage(b.imageId) : null;
+  if (uploaded) {
+    // the artwork is the banner; it is drawn to cover the surface, cropping overflow
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    g.fillStyle = b.bg || '#1a0f2e';
+    g.fillRect(0, 0, c.width, c.height);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.max(c.width / img.width, c.height / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      g.drawImage(img, (c.width - w) / 2, (c.height - h) / 2, w, h);
+      tex.needsUpdate = true;
+    };
+    img.src = uploaded;
+    return tex;
+  }
+
   const grad = g.createLinearGradient(0, 0, c.width, c.height);
   grad.addColorStop(0, b.bg);
   grad.addColorStop(1, shade(b.bg, -28));
@@ -322,8 +340,8 @@ export function buildStore(exp, variantId) {
 
   /* ---- retail media ---- */
   for (const mount of BANNER_MOUNTS) {
-    const b = variant.banners?.[mount.id];
-    if (!b?.enabled) continue;
+    const b = S.bannerAt(exp, variantId, mount.id);
+    if (!b) continue;
     const tex = bannerTexture(b, mount);
     const mat = mount.kind === 'screen'
       ? new THREE.MeshBasicMaterial({ map: tex })
