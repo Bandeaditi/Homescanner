@@ -8,6 +8,7 @@ import {
   BANNER_MOUNTS, productById
 } from '../core/config.js';
 import * as S from '../core/state.js';
+import { getImage } from '../core/images.js';
 
 const PACK_SIZE = {
   Cereal:   [0.30, 0.44, 0.13],
